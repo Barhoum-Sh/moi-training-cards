@@ -1,0 +1,54 @@
+name: Deploy MOI PWA
+
+on:
+  push:
+    branches: [main, master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/configure-pages@v5
+      - name: Prepare Site Assets
+        run: |
+          mkdir -p _site
+          if [ -f "index.html" ]; then cp "index.html" "_site/index.html"; fi
+          if [ -f "inspector.html" ]; then cp "inspector.html" "_site/inspector.html"; fi
+          for f in *.html; do
+            if [ ! -e "$f" ] || [ "$f" = "index.html" ] || [ "$f" = "inspector.html" ]; then continue; fi
+            if grep -qiE "BarcodeDetector|jsQR|الرقابة والتدقيق|رادار" "$f"; then
+              cp "$f" "_site/inspector.html"
+            else
+              cp "$f" "_site/index.html"
+            fi
+          done
+          if [ ! -f "_site/index.html" ] && [ -f "code_artifact.html" ]; then cp "code_artifact.html" "_site/index.html"; fi
+          if [ ! -f "_site/inspector.html" ] && [ -f "code_artifact2.html" ]; then cp "code_artifact2.html" "_site/inspector.html"; fi
+          for sw in sw.service.worker.js sw_service_worker.js sw.js; do
+            if [ -f "$sw" ]; then
+              cp "$sw" "_site/sw.service.worker.js"
+              cp "$sw" "_site/sw_service_worker.js"
+              cp "$sw" "_site/sw.js"
+              break
+            fi
+          done
+          touch _site/.nojekyll
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: ./_site
+      - id: deployment
+        uses: actions/deploy-pages@v4
