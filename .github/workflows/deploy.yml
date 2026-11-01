@@ -23,9 +23,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/configure-pages@v5
-      - name: Prepare Site Assets
+      - name: Prepare Site Assets & PWA Icons
         run: |
-          mkdir -p _site
+          mkdir -p _site/icons
           if [ -f "index.html" ]; then cp "index.html" "_site/index.html"; fi
           if [ -f "inspector.html" ]; then cp "inspector.html" "_site/inspector.html"; fi
           for f in *.html; do
@@ -46,6 +46,57 @@ jobs:
               break
             fi
           done
+
+          # توليد أيقونات PWA الرسمية (192x192 و 512x512) لتفعيل خيار التثبيت في Chrome
+          python3 -c "
+          from PIL import Image, ImageDraw
+          for size, name in [(192, 'icon-192.png'), (512, 'icon-512.png')]:
+              img = Image.new('RGBA', (size, size), (15, 23, 42, 255))
+              draw = ImageDraw.Draw(img)
+              m = size * 0.12
+              pts = [(m, m), (size - m, m), (size - m, size * 0.55), (size * 0.5, size - m), (m, size * 0.55)]
+              draw.polygon(pts, fill=(6, 95, 70, 255), outline=(217, 119, 6, 255), width=max(2, int(size*0.03)))
+              img.save('_site/icons/' + name)
+          "
+
+          # كتابة manifest.json القياسي المستوفي لكافة شروط التثبيت في Chrome
+          cat << 'EOF' > _site/manifest.json
+          {
+            "name": "وزارة الداخلية — منظومة البطاقات التدريبية",
+            "short_name": "الرقابة الميدانية",
+            "description": "منظومة إصدار البطاقات التدريبية ووحدة الرقابة والتدقيق الميداني",
+            "start_url": "./index.html",
+            "scope": "./",
+            "display": "standalone",
+            "orientation": "portrait",
+            "dir": "rtl",
+            "lang": "ar",
+            "background_color": "#0f172a",
+            "theme_color": "#0f172a",
+            "icons": [
+              {
+                "src": "icons/icon-192.png",
+                "sizes": "192x192",
+                "type": "image/png",
+                "purpose": "any maskable"
+              },
+              {
+                "src": "icons/icon-512.png",
+                "sizes": "512x512",
+                "type": "image/png",
+                "purpose": "any maskable"
+              }
+            ]
+          }
+          EOF
+
+          # ربط ملف manifest تلقائياً في الصفحات
+          for page in _site/index.html _site/inspector.html; do
+            if [ -f "$page" ] && ! grep -q 'rel="manifest"' "$page"; then
+              sed -i 's|</head>|<link rel="manifest" href="manifest.json"><meta name="theme-color" content="#0f172a"></head>|i' "$page"
+            fi
+          done
+
           touch _site/.nojekyll
       - uses: actions/upload-pages-artifact@v3
         with:
